@@ -69,6 +69,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define EFFECT_PIXELS_RAINBOW 0x05
 #define EFFECT_PIXELS_BRIGHTNESS 0x06
 
+typedef uint32_t RGB24;
+
 typedef struct
 {
     float red;
@@ -103,7 +105,7 @@ bool updating_strips;
 
 uint8_t ws2812_reg_buffer[4]; // Just in case a 32bit value register is added
 
-uint32_t pixel_color_value;
+RGB24 pixel_color_value;
 REG24bit_t pixel_color_reg;
 
 Effect_t pixel_effect_value;
@@ -226,7 +228,7 @@ static HSV_COLOR rgb2hsv(RGB_COLOR rgb)
     return hsv;
 }
 
-static inline bool put_pixel(uint8_t strip, uint32_t pixel_grbx)
+static inline bool put_pixel(uint8_t strip, RGB24 pixel_grbx)
 {
     if (pio_sm_is_tx_fifo_full(LED_PIO, strip))
         return true;
@@ -235,7 +237,7 @@ static inline bool put_pixel(uint8_t strip, uint32_t pixel_grbx)
     return false;
 }
 
-static uint32_t traslate_pixel2gbrx(PIXEL_STATE pixel)
+static RGB24 traslate_pixel2gbrx(PIXEL_STATE pixel)
 {
     HSV_COLOR hsv = rgb2hsv(pixel.rgb);
     hsv.v *= (pixel.brightness / 255.0f);
@@ -245,7 +247,7 @@ static uint32_t traslate_pixel2gbrx(PIXEL_STATE pixel)
            (((uint8_t)rgb.red) << 8);
 }
 
-static RGB_COLOR traslate_rgb2color(uint32_t rgb_value)
+static RGB_COLOR traslate_rgb2color(RGB24 rgb_value)
 {
     RGB_COLOR color;
     color.red = (float)((rgb_value >> 16) & 0xff);
@@ -254,10 +256,10 @@ static RGB_COLOR traslate_rgb2color(uint32_t rgb_value)
     return color;
 }
 
-static uint32_t inline get_next_pixel_value(uint8_t strip)
+static RGB24 inline get_next_pixel_value(uint8_t strip)
 {
     uint8_t display_led_no = strips[strip].next_led_to_display;
-    uint32_t display_color_value = traslate_pixel2gbrx(strips[strip].pixels[display_led_no]);
+    RGB24 display_color_value = traslate_pixel2gbrx(strips[strip].pixels[display_led_no]);
     return display_color_value;
 }
 
@@ -297,7 +299,7 @@ static void update_pixels()
     updating_strips = true;
 }
 
-static void fill_strip(uint32_t rgb24_color)
+static void fill_strip(RGB24 rgb24_color)
 {
     RGB_COLOR color = traslate_rgb2color(rgb24_color);
     for (uint i = 0; i < strips[selected_strip].total_leds; i++)
@@ -319,7 +321,7 @@ static void select_pixel(uint8_t pixel_no)
     strips[selected_strip].selected_pixel = pixel_no;
 }
 
-static void write_pixel(uint32_t rgb24_color)
+static void write_pixel(RGB24 rgb24_color)
 {
     strips[selected_strip].pixels[strips[selected_strip].selected_pixel++].rgb = traslate_rgb2color(rgb24_color);
 }
@@ -509,6 +511,23 @@ void ws2812_set_color(uint8_t color) {
     send_data((color & 1) == 1 ? 0xff : 0x00);
     send_data((color & 2) == 2 ? 0xff : 0x00);
     send_data((color & 4) == 4 ? 0xff : 0x00);
+
+    select_command(CMD_UPDATE_STRIPS);
+}
+
+void ws2812_set_color(RGB24 color) {
+    current_led_color = color;
+
+    select_command(CMD_SELECT_STRIP);
+    send_data(0);
+
+    select_command(CMD_SET_PIX_COUNT);
+    send_data(255);
+
+    select_command(CMD_FILL_STRIP_COL);
+    send_data(color & 0x00FF0000);
+    send_data(color & 0x0000FF00);
+    send_data(color & 0x000000FF);
 
     select_command(CMD_UPDATE_STRIPS);
 }
